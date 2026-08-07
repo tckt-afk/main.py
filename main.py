@@ -7,9 +7,10 @@ TEN_KHO = "KHO HÀ NỘI"
 URL_KHO = "https://admin-0911801688-268.nhuahvt.com/Warehouse/Items?whid=4&includeTemp=1"
 
 LARK_WEBHOOK = os.getenv("LARK_WEBHOOK", "https://open.larksuite.com/open-apis/bot/v2/hook/0905e11c-b533-4963-8f76-6d71c18b1f6c")
-COOKIE_STR = os.getenv("KHO_COOKIE", "ab.storage.deviceId.f9c2b69f-2136-44e0-a55a-dff72d99aa19=g%3AzSPXf3JQpXfAMri0MPiIb6YQbnb2%7Ce%3Aundefined%7Cc%3A1753666412621%7Cl%3A1753666412621; ab.storage.sessionId.f9c2b69f-2136-44e0-a55a-dff72d99aa19=g%3A2d80f29d-4282-bbc8-6cc8-9e0795416b76%7Ce%3A1753668212652%7Cc%3A1753666412653%7Cl%3A1753666412653; .AspNetCore.Antiforgery.-_GDC7Lnplw=CfDJ8NPrk8sz-19ClSlHejQLM82bL-w0xnHjrhD0do37dz3EUqxjp2ksv8GKkbADPuWJSXkB5ZzmRaW4tQXY8dtJk1zhDfA-aU-jIygB-qDK0WbVBf8S1sIrwPmo6Idtn3kMRHjj-K0oph1JC0yGk4a-TKc; HVTNhuaAdmin=CfDJ8NPrk8sz-19ClSlHejQLM81CS8Wj_vfsKR9FgwG2VaOsRcq83F16obboAamJ93I_GBU9VThuml0IqwqOZI-mXTpnPIg1imsQXmuMSWVAjL4Cma0vm6odvlQrsCZcTMvxgfUY9e-VChjHfng80jpwkExRZ8W3187WFDQBj7dnfWWgaSaq4W4ckYnPuYroz53EFx-IyLUmvcRqYuXG7aNj0ES9-_AUshnu9MaF7CINqBltCPU6zdaT4d-4i1YoXjeu5ASQzzCmWndqQc9GEZjKSByVVt1CnoPZODORaIVz5KpDn03USPAfsyoMlGC-kxnAy5YZO-RYpibNQa1jZuqNElu1r3-HkuQYMIflcR6jgXLeMtKdN43d0m0CsCMdaV2Qk8vH5y5Y5t8JVtOve7Cuvfaftf7pjOTT5MreX3kM5vAoMu4ySSps9oLxECC72pBBRZNR0Ch-t0r1WeWVteqLDTQUkggsDNBdiEtJxJBjJQUps-bZA5DYAmqqg2WTbNvEhi5Hpuzni5A5CoRnJtcH5bYEorUyPupK-cuF79DX9KKiw7UVsQ4jYRPVCJbsrvoMiVmLa_HaGLZzLHx6l8a_zqqVmuef273ROsQ97kqcfcQujRRdz5OgGbKS21y8Wtlmu_gwrKSaUUQA1twu1wqLZ22CAeMzzSiuDKQGhFI6sdNbu9Neac_2QZU45nSxB6D26k_uM8Uxsr4d_YyFx646Px4")
+COOKIE_STR = os.getenv("KHO_COOKIE", "")
 
 NGUONG_CANH_BAO = 1300
+MAX_PAGES = 30  # Giới hạn an toàn tối đa 30 trang
 
 def fetch_data():
     headers = {
@@ -20,13 +21,14 @@ def fetch_data():
     }
 
     canh_bao_list = []
-    page = 1
     
-    while True:
+    # Giới hạn tối đa từ trang 1 đến trang 30
+    for page in range(1, MAX_PAGES + 1):
         url = f"{URL_KHO}&page={page}"
         try:
             print(f"[{TEN_KHO}] Đang quét trang {page}...")
-            response = requests.get(url, headers=headers, timeout=15)
+            # Giảm timeout xuống 5s để chạy nhanh hơn
+            response = requests.get(url, headers=headers, timeout=5)
             
             if response.status_code != 200:
                 print(f"Dừng quét: Trang {page} trả về mã {response.status_code}")
@@ -35,14 +37,14 @@ def fetch_data():
             soup = BeautifulSoup(response.text, 'html.parser')
             rows = soup.select("table tbody tr")
             
+            # Nếu trang không có hàng dữ liệu nào -> Kết thúc kho
             if not rows:
-                print(f"[{TEN_KHO}] Đã quét xong toàn bộ kho! Trang cuối cùng là trang {page - 1}.")
+                print(f"[{TEN_KHO}] Đã hết dữ liệu tại trang {page - 1}.")
                 break
                 
             has_valid_item = False
             for row in rows:
                 cols = row.find_all("td")
-                # Kiểm tra đủ ít nhất 5 cột
                 if len(cols) >= 5:
                     ten_sp = cols[1].text.strip()   # Cột 2: Sản phẩm
                     ma_sp = cols[2].text.strip()    # Cột 3: Mã SP
@@ -54,7 +56,6 @@ def fetch_data():
                     except ValueError:
                         continue
 
-                    # Kiểm tra điều kiện tồn kho nhỏ hơn 1300
                     if ton_kho < NGUONG_CANH_BAO:
                         canh_bao_list.append({
                             "ma": ma_sp,
@@ -62,14 +63,13 @@ def fetch_data():
                             "ton": ton_kho
                         })
             
+            # Nếu trang này không đọc được sản phẩm nào hợp lệ -> Dừng quét
             if not has_valid_item:
-                print(f"[{TEN_KHO}] Trang {page} không có dữ liệu hợp lệ. Dừng quét.")
+                print(f"[{TEN_KHO}] Trang {page} không chứa sản phẩm hợp lệ. Dừng quét.")
                 break
 
-            page += 1
-
         except Exception as e:
-            print(f"Lỗi khi quét trang {page}: {e}")
+            print(f"Lỗi/Timeout khi quét trang {page}: {e}")
             break
 
     return canh_bao_list
