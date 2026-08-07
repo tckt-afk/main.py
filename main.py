@@ -10,7 +10,7 @@ LARK_WEBHOOK = os.getenv("LARK_WEBHOOK", "https://open.larksuite.com/open-apis/b
 COOKIE_STR = os.getenv("KHO_COOKIE", "")
 
 NGUONG_CANH_BAO = 1300
-MAX_PAGES = 30  # Giới hạn an toàn tối đa 30 trang
+MAX_PAGES = 30  # Quét tối đa 30 trang
 
 def fetch_data():
     headers = {
@@ -20,14 +20,12 @@ def fetch_data():
         "Cookie": COOKIE_STR
     }
 
-    canh_bao_list = []
+    all_items = []
     
-    # Giới hạn tối đa từ trang 1 đến trang 30
     for page in range(1, MAX_PAGES + 1):
         url = f"{URL_KHO}&page={page}"
         try:
             print(f"[{TEN_KHO}] Đang quét trang {page}...")
-            # Giảm timeout xuống 5s để chạy nhanh hơn
             response = requests.get(url, headers=headers, timeout=5)
             
             if response.status_code != 200:
@@ -37,7 +35,6 @@ def fetch_data():
             soup = BeautifulSoup(response.text, 'html.parser')
             rows = soup.select("table tbody tr")
             
-            # Nếu trang không có hàng dữ liệu nào -> Kết thúc kho
             if not rows:
                 print(f"[{TEN_KHO}] Đã hết dữ liệu tại trang {page - 1}.")
                 break
@@ -53,17 +50,14 @@ def fetch_data():
                     try:
                         ton_kho = int(raw_ton)
                         has_valid_item = True
-                    except ValueError:
-                        continue
-
-                    if ton_kho < NGUONG_CANH_BAO:
-                        canh_bao_list.append({
+                        all_items.append({
                             "ma": ma_sp,
                             "ten": ten_sp,
                             "ton": ton_kho
                         })
+                    except ValueError:
+                        continue
             
-            # Nếu trang này không đọc được sản phẩm nào hợp lệ -> Dừng quét
             if not has_valid_item:
                 print(f"[{TEN_KHO}] Trang {page} không chứa sản phẩm hợp lệ. Dừng quét.")
                 break
@@ -72,17 +66,33 @@ def fetch_data():
             print(f"Lỗi/Timeout khi quét trang {page}: {e}")
             break
 
-    return canh_bao_list
+    # KIỂM TRA LOGIC: Tất cả sản phẩm có đều < NGUONG_CANH_BAO hay không?
+    if not all_items:
+        print(f"[{TEN_KHO}] Không quét được sản phẩm nào.")
+        return False, []
 
-def send_lark_alert(items):
-    if not items:
-        print(f"[{TEN_KHO}] Tất cả sản phẩm đều đủ hàng (Tồn >= {NGUONG_CANH_BAO}). Báo cáo hoàn tất!")
+    # Tìm xem có sản phẩm nào còn >= NGUONG_CANH_BAO không
+    san_pham_con_nhieu = [item for item in all_items if item['ton'] >= NGUONG_CANH_BAO]
+
+    if len(san_pham_con_nhieu) == 0:
+        # TẤT CẢ SẢN PHẨM ĐỀU < 1300
+        print(f"[{TEN_KHO}] CẢNH BÁO: TOÀN BỘ kho đều có tồn kho dưới {NGUONG_CANH_BAO}!")
+        return True, all_items
+    else:
+        print(f"[{TEN_KHO}] Vẫn còn {len(san_pham_con_nhieu)} sản phẩm có tồn >= {NGUONG_CANH_BAO}. Chưa phát cảnh báo.")
+        return False, []
+
+def send_lark_alert(should_alert, items):
+    if not should_alert:
         return
 
     content_lines = []
-    for item in items:
+    for item in items[:15]:  # Hiển thị tối đa 15 sản phẩm tiêu biểu
         content_lines.append(f"• **[{item['ma']}]** {item['ten']} — Tồn: <font color='red'>**{item['ton']}**</font>")
     
+    if len(items) > 15:
+        content_lines.append(f"\n...và **{len(items) - 15}** sản phẩm khác.")
+
     content_text = "\n".join(content_lines)
 
     payload = {
@@ -91,7 +101,7 @@ def send_lark_alert(items):
             "header": {
                 "title": {
                     "tag": "plain_text",
-                    "content": f"⚠️ BÁO CÁO {TEN_KHO}: TỒN < {NGUONG_CANH_BAO}"
+                    "content": f"🚨 BÁO CÁO TOÀN BỘ KHO HÀ NỘI < {NGUONG_CANH_BAO}"
                 },
                 "template": "red"
             },
@@ -100,7 +110,7 @@ def send_lark_alert(items):
                     "tag": "div",
                     "text": {
                         "tag": "lark_md",
-                        "content": f"📍 **Địa điểm:** {TEN_KHO}\nPhát hiện **{len(items)}** sản phẩm gần hết hàng:\n\n{content_text}"
+                        "content": f"📍 **Địa điểm:** {TEN_KHO}\n⚠️ **CẢNH BÁO NGUY CẤP:** Tất cả **{len(items)}** sản phẩm trong kho đều đã giảm xuống dưới {NGUONG_CANH_BAO}!\n\n{content_text}"
                     }
                 },
                 {
@@ -123,5 +133,5 @@ def send_lark_alert(items):
     print("Kết quả gửi tin nhắn sang Lark:", res.text)
 
 if __name__ == "__main__":
-    data = fetch_data()
-    send_lark_alert(data)
+    should_alert, data = fetch_data()
+    send_lark_alert(should_alert, data)
