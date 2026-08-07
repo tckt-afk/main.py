@@ -9,7 +9,7 @@ URL_KHO = "https://admin-0911801688-268.nhuahvt.com/Warehouse/Items?whid=4&inclu
 LARK_WEBHOOK = os.getenv("LARK_WEBHOOK", "https://open.larksuite.com/open-apis/bot/v2/hook/0905e11c-b533-4963-8f76-6d71c18b1f6c")
 COOKIE_STR = os.getenv("KHO_COOKIE", "CfDJ8NPrk8sz-19ClSlHejQLM82bL-w0xnHjrhD0do37dz3EUqxjp2ksv8GKkbADPuWJSXkB5ZzmRaW4tQXY8dtJk1zhDfA-aU-jIygB-qDK0WbVBf8S1sIrwPmo6Idtn3kMRHjj-K0oph1JC0yGk4a-TKc")
 
-NGUONG_CANH_BAO = 1000
+NGUONG_CANH_BAO = 1300
 
 def fetch_data():
     headers = {
