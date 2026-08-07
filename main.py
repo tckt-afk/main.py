@@ -7,7 +7,7 @@ TEN_KHO = "KHO HÀ NỘI"
 URL_KHO = "https://admin-0911801688-268.nhuahvt.com/Warehouse/Items?whid=4&includeTemp=1"
 
 LARK_WEBHOOK = os.getenv("LARK_WEBHOOK", "https://open.larksuite.com/open-apis/bot/v2/hook/0905e11c-b533-4963-8f76-6d71c18b1f6c")
-COOKIE_STR = os.getenv("KHO_COOKIE", "CfDJ8NPrk8sz-19ClSlHejQLM82bL-w0xnHjrhD0do37dz3EUqxjp2ksv8GKkbADPuWJSXkB5ZzmRaW4tQXY8dtJk1zhDfA-aU-jIygB-qDK0WbVBf8S1sIrwPmo6Idtn3kMRHjj-K0oph1JC0yGk4a-TKc")
+COOKIE_STR = os.getenv("KHO_COOKIE", "ab.storage.deviceId.f9c2b69f-2136-44e0-a55a-dff72d99aa19=g%3AzSPXf3JQpXfAMri0MPiIb6YQbnb2%7Ce%3Aundefined%7Cc%3A1753666412621%7Cl%3A1753666412621; ab.storage.sessionId.f9c2b69f-2136-44e0-a55a-dff72d99aa19=g%3A2d80f29d-4282-bbc8-6cc8-9e0795416b76%7Ce%3A1753668212652%7Cc%3A1753666412653%7Cl%3A1753666412653; .AspNetCore.Antiforgery.-_GDC7Lnplw=CfDJ8NPrk8sz-19ClSlHejQLM82bL-w0xnHjrhD0do37dz3EUqxjp2ksv8GKkbADPuWJSXkB5ZzmRaW4tQXY8dtJk1zhDfA-aU-jIygB-qDK0WbVBf8S1sIrwPmo6Idtn3kMRHjj-K0oph1JC0yGk4a-TKc; HVTNhuaAdmin=CfDJ8NPrk8sz-19ClSlHejQLM81CS8Wj_vfsKR9FgwG2VaOsRcq83F16obboAamJ93I_GBU9VThuml0IqwqOZI-mXTpnPIg1imsQXmuMSWVAjL4Cma0vm6odvlQrsCZcTMvxgfUY9e-VChjHfng80jpwkExRZ8W3187WFDQBj7dnfWWgaSaq4W4ckYnPuYroz53EFx-IyLUmvcRqYuXG7aNj0ES9-_AUshnu9MaF7CINqBltCPU6zdaT4d-4i1YoXjeu5ASQzzCmWndqQc9GEZjKSByVVt1CnoPZODORaIVz5KpDn03USPAfsyoMlGC-kxnAy5YZO-RYpibNQa1jZuqNElu1r3-HkuQYMIflcR6jgXLeMtKdN43d0m0CsCMdaV2Qk8vH5y5Y5t8JVtOve7Cuvfaftf7pjOTT5MreX3kM5vAoMu4ySSps9oLxECC72pBBRZNR0Ch-t0r1WeWVteqLDTQUkggsDNBdiEtJxJBjJQUps-bZA5DYAmqqg2WTbNvEhi5Hpuzni5A5CoRnJtcH5bYEorUyPupK-cuF79DX9KKiw7UVsQ4jYRPVCJbsrvoMiVmLa_HaGLZzLHx6l8a_zqqVmuef273ROsQ97kqcfcQujRRdz5OgGbKS21y8Wtlmu_gwrKSaUUQA1twu1wqLZ22CAeMzzSiuDKQGhFI6sdNbu9Neac_2QZU45nSxB6D26k_uM8Uxsr4d_YyFx646Px4")
 
 NGUONG_CANH_BAO = 1300
 
@@ -22,7 +22,6 @@ def fetch_data():
     canh_bao_list = []
     page = 1
     
-    # Vòng lặp tự động quét từng trang cho đến khi hết dữ liệu
     while True:
         url = f"{URL_KHO}&page={page}"
         try:
@@ -36,7 +35,6 @@ def fetch_data():
             soup = BeautifulSoup(response.text, 'html.parser')
             rows = soup.select("table tbody tr")
             
-            # Nếu trang không còn dòng dữ liệu nào -> Đã tới trang cuối cùng
             if not rows:
                 print(f"[{TEN_KHO}] Đã quét xong toàn bộ kho! Trang cuối cùng là trang {page - 1}.")
                 break
@@ -44,17 +42,19 @@ def fetch_data():
             has_valid_item = False
             for row in rows:
                 cols = row.find_all("td")
-                if len(cols) >= 3:
-                    ma_sp = cols[0].text.strip()
-                    ten_sp = cols[1].text.strip()
+                # Kiểm tra đủ ít nhất 5 cột
+                if len(cols) >= 5:
+                    ten_sp = cols[1].text.strip()   # Cột 2: Sản phẩm
+                    ma_sp = cols[2].text.strip()    # Cột 3: Mã SP
+                    raw_ton = cols[4].text.strip().replace(",", "").replace(".", "") # Cột 5: Số lượng
                     
-                    raw_ton = cols[2].text.strip().replace(",", "").replace(".", "")
                     try:
                         ton_kho = int(raw_ton)
                         has_valid_item = True
                     except ValueError:
                         continue
 
+                    # Kiểm tra điều kiện tồn kho nhỏ hơn 1300
                     if ton_kho < NGUONG_CANH_BAO:
                         canh_bao_list.append({
                             "ma": ma_sp,
@@ -62,12 +62,11 @@ def fetch_data():
                             "ton": ton_kho
                         })
             
-            # Nếu trang không chứa sản phẩm hợp lệ nào nữa thì dừng
             if not has_valid_item:
-                print(f"[{TEN_KHO}] Trang {page} không có sản phẩm. Dừng quét.")
+                print(f"[{TEN_KHO}] Trang {page} không có dữ liệu hợp lệ. Dừng quét.")
                 break
 
-            page += 1  # Tự động chuyển sang trang tiếp theo
+            page += 1
 
         except Exception as e:
             print(f"Lỗi khi quét trang {page}: {e}")
