@@ -5,12 +5,13 @@ import json
 from bs4 import BeautifulSoup
 from datetime import datetime
 
-# --- CẤU HÌNH KHO & URL ---
+# ==========================================
+# 1. CẤU HÌNH ĐẦY ĐỦ THÔNG TIN 2 KHO
+# ==========================================
 DANH_SACH_KHO = [
     {
         "ten": "KHO HÀ NỘI",
-        "tag_nhan_biet": "🏙️ [KHO HÀ NỘI - MIỀN BẮC]",
-        "mau_sac_chot_ca": "purple",      # Màu Tím đặc trưng cho Hà Nội
+        "ten_ngan": "🏛️ KHO HÀ NỘI",
         "url_inventory": "https://admin-0911801688-268.nhuahvt.com/Warehouse/Items?whid=4&includeTemp=1",
         "url_history_hientai": "https://admin-0911801688-268.nhuahvt.com/Warehouse/Transaction?whid=4",
         "url_history_cho": "https://admin-0911801688-268.nhuahvt.com/Warehouse/Transaction?whid=9",
@@ -18,8 +19,7 @@ DANH_SACH_KHO = [
     },
     {
         "ten": "KHO HỒ CHÍ MINH",
-        "tag_nhan_biet": "🌆 [KHO HỒ CHÍ MINH - MIỀN NAM]",
-        "mau_sac_chot_ca": "wathet",      # Màu Xanh Dương rực rỡ đặc trưng cho HCM
+        "ten_ngan": "🏢 KHO HCM",
         "url_inventory": "https://admin-0911801688-268.nhuahvt.com/Warehouse/Items?includeTemp=1&whid=6",
         "url_history_hientai": "https://admin-0911801688-268.nhuahvt.com/Warehouse/Transaction?whid=6",
         "url_history_cho": "https://admin-0911801688-268.nhuahvt.com/Warehouse/Transaction?whid=11",
@@ -27,14 +27,20 @@ DANH_SACH_KHO = [
     }
 ]
 
+# ==========================================
+# 2. CÁC HẰNG SỐ CẤU HÌNH HỆ THỐNG
+# ==========================================
 LARK_WEBHOOK = os.getenv("LARK_WEBHOOK", "")
-NGUONG_BAO_CAO = 300      # Ngưỡng báo cáo tổng hợp ca (<= 300)
+NGUONG_BAO_CAO = 300      # Ngưỡng báo cáo tổng hợp chốt ca (<= 300)
 NGUONG_KHAN_CAP = 100     # Ngưỡng cảnh báo khẩn cấp (<= 100)
-MAX_PAGES_HISTORY = 30 
-MAX_PAGES_INVENTORY = 30 
+MAX_PAGES_HISTORY = 30    # Trang quét lịch sử giao dịch
+MAX_PAGES_INVENTORY = 30  # Trang quét tồn kho
 
 STATE_FILE = "alerted_items.json"
 
+# ==========================================
+# 3. HÀM QUẢN LÝ BỘ NHỚ ĐỆM CHỐNG LẶP TIN
+# ==========================================
 def load_alerted_items():
     if os.path.exists(STATE_FILE):
         try:
@@ -51,6 +57,9 @@ def save_alerted_items(data):
     except Exception as e:
         print(f"Lỗi lưu bộ nhớ đệm: {e}")
 
+# ==========================================
+# 4. HÀM LẤY DỮ LIỆU BÁN HÀNG ĐỂ ƯU TIÊN MÃ HOT
+# ==========================================
 def get_product_sales_stats(url_history_hientai, url_history_cho, cookie, ten_kho):
     sales_data = {}
     headers = {
@@ -98,6 +107,9 @@ def get_product_sales_stats(url_history_hientai, url_history_cho, cookie, ten_kh
 
     return sales_data
 
+# ==========================================
+# 5. HÀM QUÉT TỒN KHO THỰC TẾ
+# ==========================================
 def fetch_data_by_kho(kho, nguong_ton):
     sales_stats = get_product_sales_stats(
         kho["url_history_hientai"], 
@@ -156,32 +168,37 @@ def fetch_data_by_kho(kho, nguong_ton):
 
     return canh_bao_list
 
+# ==========================================
+# 6. HÀM TẠO GIAO DIỆN VÀ GỬI THÔNG BÁO LARK
+# ==========================================
 def send_lark_alert(kho, items, is_urgent=False):
     if not items:
         return
 
+    ten_ngan = kho["ten_ngan"]
     ten_kho = kho["ten"]
-    tag_nhan_biet = kho["tag_nhan_biet"]
     items_sorted = sorted(items, key=lambda x: x['da_ban'], reverse=True)
-    now_str = datetime.now().strftime("%H:%M - %d/%m/%Y")
+    now_str = datetime.now().strftime("%H:%M - %d/%m")
 
     if is_urgent:
-        # GIAO DIỆN CẢNH BÁO KHẨN CẤP (TỒN <= 100) - MÀU ĐỎ NỔI BẬT KHÁC BIỆT
+        # 🚨 THẺ KHẨN CẤP: CHỈ BÁO MÃ MỚI SỤT TOÀN BỘ (DÙNG NỀN KHUNG TƯƠNG PHẢN)
         formatted_items = []
-        for idx, item in enumerate(items_sorted, 1):
+        for item in items_sorted:
             formatted_items.append(
-                f"🔥 **`{item['ma']}`** — {item['ten']}\n"
-                f"└ 🚨 Tồn kho khẩn cấp: <font color='red'>**{item['ton']}**</font> sp | Đã bán: **{item['da_ban']}** sp"
+                f"🔥 {item['ma']} ({item['ten']})\n"
+                f"   └ Tồn khẩn cấp: {item['ton']} sp | Đã bán: {item['da_ban']} sp"
             )
         
         content_text = "\n\n".join(formatted_items)
+        code_block_content = f"```text\n{content_text}\n```"
+
         payload = {
             "msg_type": "interactive",
             "card": {
                 "header": {
                     "title": {
                         "tag": "plain_text",
-                        "content": f"🚨 [KHẨN CẤP SẮP CHÁY HÀNG] {ten_kho}"
+                        "content": f"🚨 [KHẨN CẤP] MÃ MỚI SẮP CHÁY HÀNG - {ten_ngan}"
                     },
                     "template": "red"
                 },
@@ -190,87 +207,114 @@ def send_lark_alert(kho, items, is_urgent=False):
                         "tag": "div",
                         "text": {
                             "tag": "lark_md",
-                            "content": f"📍 **Địa điểm:** {tag_nhan_biet}\n"
-                                       f"⏰ **Thời gian phát hiện:** {now_str}\n"
-                                       f"⚠️ Phát hiện **{len(items)}** mã MỚI bị tụt dưới **{NGUONG_KHAN_CAP} sp**!\n"
-                                       f"⚡ **Đề nghị Xưởng ưu tiên dồn máy sản xuất ngay.**"
+                            "content": f"⏰ **{now_str}** — Phát hiện **{len(items)}** mã MỚI bị tụt dưới **{NGUONG_KHAN_CAP} sp**.\n⚡ **Xưởng lưu ý ưu tiên dồn máy mã này!**"
                         }
                     },
-                    {"tag": "hr"},
                     {
                         "tag": "div",
                         "text": {
                             "tag": "lark_md",
-                            "content": f"### 💥 DANH SÁCH MÃ CẦN DỒN MÁY GẤP\n\n{content_text}"
+                            "content": code_block_content
                         }
-                    },
-                    {"tag": "hr"},
-                    {
-                        "tag": "note",
-                        "elements": [{"tag": "plain_text", "content": f"🤖 Cảnh báo khẩn cấp tự động - {ten_kho}"}]
                     }
                 ]
             }
         }
     else:
-        # GIAO DIỆN BÁO CÁO CHỐT CA (HN MÀU TÍM, HCM MÀU XANH DƯƠNG)
-        formatted_items = []
-        for idx, item in enumerate(items_sorted, 1):
-            hot_badge = " 🔥 (TOP BÁN CHẠY)" if idx <= 5 else ""
-            formatted_items.append(
-                f"**{idx}. `{item['ma']}`**{hot_badge}\n"
-                f"├ 📦 Tồn kho: <font color='red'>**{item['ton']}**</font> sp\n"
-                f"└ ⚡ Đã bán gần đây: **{item['da_ban']}** sp"
-            )
-        
-        content_text = "\n\n".join(formatted_items)
-        payload = {
-            "msg_type": "interactive",
-            "card": {
-                "header": {
-                    "title": {
-                        "tag": "plain_text",
-                        "content": f"📋 BÁO CÁO CHỐT CA: {ten_kho}"
+        # 📋 BÁO CÁO CHỐT CA TỔNG HỢP (08:15 SÁNG VÀ 12:00 TRƯA)
+        if ten_kho == "KHO HÀ NỘI":
+            # 🏛️ PHONG CÁCH KHO HÀ NỘI: HEADER ĐEN + Ô KHUNG NỀN ĐEN CHỮ TRẮNG
+            formatted_items = []
+            for idx, item in enumerate(items_sorted, 1):
+                hot_mark = " [TOP BÁN CHẠY]" if idx <= 5 else ""
+                formatted_items.append(
+                    f"{idx}. {item['ma']}{hot_mark}\n"
+                    f"   └ Tồn kho: {item['ton']} sp  |  Đã bán: {item['da_ban']} sp"
+                )
+            
+            black_box_content = "```text\n" + "\n\n".join(formatted_items) + "\n```"
+
+            payload = {
+                "msg_type": "interactive",
+                "card": {
+                    "header": {
+                        "title": {
+                            "tag": "plain_text",
+                            "content": f"📋 BÁO CÁO CHỐT CA — {ten_ngan}"
+                        },
+                        "template": "neutral"  # Nền Đen
                     },
-                    "template": kho["mau_sac_chot_ca"]
-                },
-                "elements": [
-                    {
-                        "tag": "div",
-                        "text": {
-                            "tag": "lark_md",
-                            "content": f"📍 **Địa điểm:** {tag_nhan_biet}\n"
-                                       f"⏰ **Thời gian chốt ca:** {now_str}\n"
-                                       f"⚠️ Tổng số mã cần sản xuất: **{len(items)}** mã đang bán (Tồn **≤ {NGUONG_BAO_CAO}**)\n"
-                                       f"💡 *Đã tự động sắp xếp mã BÁN CHẠY NHẤT lên đầu.*"
+                    "elements": [
+                        {
+                            "tag": "div",
+                            "text": {
+                                "tag": "lark_md",
+                                "content": f"⏰ **Chốt ca:** {now_str} | Tổng **{len(items)}** mã cần dồn dệt (Tồn **≤ {NGUONG_BAO_CAO}**)"
+                            }
+                        },
+                        {
+                            "tag": "div",
+                            "text": {
+                                "tag": "lark_md",
+                                "content": black_box_content  # Ô nền đen chữ trắng
+                            }
                         }
-                    },
-                    {"tag": "hr"},
-                    {
-                        "tag": "div",
-                        "text": {
-                            "tag": "lark_md",
-                            "content": f"### 🏭 DANH SÁCH MÃ ƯU TIÊN SẢN XUẤT\n\n{content_text}"
-                        }
-                    },
-                    {"tag": "hr"},
-                    {
-                        "tag": "note",
-                        "elements": [{"tag": "plain_text", "content": f"🤖 Báo cáo định kỳ chốt ca - {ten_kho}"}]
-                    }
-                ]
+                    ]
+                }
             }
-        }
+        else:
+            # 🏢 PHONG CÁCH KHO HCM: HEADER XANH DƯƠNG THOÁNG MẮT
+            formatted_items = []
+            for idx, item in enumerate(items_sorted, 1):
+                hot_badge = " 🔥" if idx <= 5 else ""
+                formatted_items.append(
+                    f"**{idx}. `{item['ma']}`**{hot_badge}\n"
+                    f"└ Tồn: <font color='red'>**{item['ton']}**</font> sp | Đã bán: **{item['da_ban']}** sp"
+                )
+            
+            content_text = "\n\n".join(formatted_items)
+            payload = {
+                "msg_type": "interactive",
+                "card": {
+                    "header": {
+                        "title": {
+                            "tag": "plain_text",
+                            "content": f"📋 BÁO CÁO CHỐT CA — {ten_ngan}"
+                        },
+                        "template": "wathet"  # Nền Xanh Dương
+                    },
+                    "elements": [
+                        {
+                            "tag": "div",
+                            "text": {
+                                "tag": "lark_md",
+                                "content": f"⏰ **Chốt ca:** {now_str} | Tổng **{len(items)}** mã cần dồn dệt (Tồn **≤ {NGUONG_BAO_CAO}**)"
+                            }
+                        },
+                        {"tag": "hr"},
+                        {
+                            "tag": "div",
+                            "text": {
+                                "tag": "lark_md",
+                                "content": content_text
+                            }
+                        }
+                    ]
+                }
+            }
 
     res = requests.post(LARK_WEBHOOK, json=payload)
-    print(f"[{ten_kho}] Gửi tin nhắn Lark thành công:", res.text)
+    print(f"[{kho['ten']}] Gửi tin nhắn Lark thành công:", res.text)
 
+# ==========================================
+# 7. KHỞI CHẠY CHƯƠNG TRÌNH CHÍNH (MAIN)
+# ==========================================
 if __name__ == "__main__":
     now = datetime.now()
     hour = now.hour
     minute = now.minute
 
-    # KIỂM TRA 2 KHUNG GIỜ CHỐT CA: 08:15 SÁNG VÀ 12:00 TRƯA
+    # KIỂM TRA KHUNG GIỜ CHỐT CA: 08:15 SÁNG VÀ 12:00 TRƯA
     is_ca_sang = (hour == 8 and 10 <= minute <= 25)
     is_ca_chieu = (hour == 12 and 0 <= minute <= 15)
     is_scheduled_report = is_ca_sang or is_ca_chieu
@@ -279,6 +323,7 @@ if __name__ == "__main__":
 
     for kho in DANH_SACH_KHO:
         if not kho["cookie"]:
+            print(f"[{kho['ten']}] Thiếu Cookie, bỏ qua.")
             continue
             
         ten_kho = kho["ten"]
@@ -291,27 +336,27 @@ if __name__ == "__main__":
             data = fetch_data_by_kho(kho, NGUONG_BAO_CAO)
             send_lark_alert(kho, data, is_urgent=False)
             
-            # Reset lại danh sách khẩn cấp để chuẩn bị theo dõi cho ca mới
-            alerted_state[ten_kho] = [item['ma'] for item in data if item['ton'] <= NGUONG_KHAN_CAP]
+            # Ghi nhớ toàn bộ danh sách mã đã báo cáo trong ca để tránh lặp lại ở bản tin khẩn cấp
+            alerted_state[ten_kho] = [item['ma'] for item in data]
         else:
-            # 2. CẢNH BÁO KHẨN CẤP TỰ ĐỘNG NẾU CÓ MÃ MỚI SỤT <= 100
+            # 2. CHỈ CẢNH BÁO KHẨN CẤP VỚI CÁC MÃ "MỚI TOÀN BỘ" SỤT <= 100
             print(f"--- QUÉT CẢNH BÁO KHẨN CẤP: {ten_kho} ---")
             data_urgent = fetch_data_by_kho(kho, NGUONG_KHAN_CAP)
             
-            # Lọc danh sách mã MỚI phát sinh (chưa có trong bộ nhớ đã báo gần nhất)
+            # Lọc các mã CHƯA TỪNG NẰM TRONG BẢN TIN CHỐT CA gần nhất
             new_urgent_items = [
                 item for item in data_urgent 
                 if item['ma'] not in alerted_state[ten_kho]
             ]
 
             if new_urgent_items:
-                print(f"[{ten_kho}] Phát hiện {len(new_urgent_items)} mã MỚI sắp cháy hàng (<= {NGUONG_KHAN_CAP})!")
+                print(f"[{ten_kho}] Phát hiện {len(new_urgent_items)} mã MỚI TOÀN BỘ sắp cháy hàng!")
                 send_lark_alert(kho, new_urgent_items, is_urgent=True)
                 
                 # Lưu mã vừa báo vào bộ nhớ để KHÔNG BẮN LẠI ở các lần quét sau
                 for item in new_urgent_items:
                     alerted_state[ten_kho].append(item['ma'])
             else:
-                print(f"[{ten_kho}] Không có mã mới nào bị tụt khẩn cấp.")
+                print(f"[{ten_kho}] Không có mã mới nào phát sinh.")
 
     save_alerted_items(alerted_state)
