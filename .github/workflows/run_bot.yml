@@ -2,9 +2,9 @@ name: Auto Check Kho Nhua HVT
 
 on:
   schedule:
-    # Chạy tự động mỗi 15 phút/lần
+    # Quét định kỳ mỗi 15 phút
     - cron: '*/15 * * * *'
-  workflow_dispatch:
+  workflow_dispatch: # Cho phép bấm chạy thủ công từ GitHub
 
 jobs:
   run-bot:
