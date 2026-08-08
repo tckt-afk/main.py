@@ -25,7 +25,7 @@ jobs:
 
       - name: Run Script
         env:
-          KHO_COOKIE_HN: ${{ secrets.KHO_COOKIE }}
-          KHO_COOKIE_HCM: ${{ secrets.COOKIE_HCM }}
+          KHO_COOKIE: ${{ secrets.KHO_COOKIE }}
+          COOKIE_HCM: ${{ secrets.COOKIE_HCM }}
           LARK_WEBHOOK: ${{ secrets.LARK_WEBHOOK }}
         run: python main.py
