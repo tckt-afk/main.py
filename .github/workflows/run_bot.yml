@@ -2,9 +2,9 @@ name: Auto Check Kho Nhua HVT
 
 on:
   schedule:
-    # Chạy tự động mỗi 15 phút/lần (Tối đa của GitHub Actions)
+    # Chạy tự động mỗi 15 phút/lần
     - cron: '*/15 * * * *'
-  workflow_dispatch: # Cho phép bấm nút chạy tay bất cứ lúc nào
+  workflow_dispatch:
 
 jobs:
   run-bot:
@@ -16,7 +16,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-python-version: '3.10'
+          python-version: '3.10'
 
       - name: Install dependencies
         run: |
@@ -25,6 +25,7 @@ jobs:
 
       - name: Run Script
         env:
-          KHO_COOKIE: ${{ secrets.KHO_COOKIE }}
+          KHO_COOKIE_HN: ${{ secrets.KHO_COOKIE }}
+          KHO_COOKIE_HCM: ${{ secrets.COOKIE_HCM }}
           LARK_WEBHOOK: ${{ secrets.LARK_WEBHOOK }}
         run: python main.py
